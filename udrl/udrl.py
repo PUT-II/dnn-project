@@ -15,8 +15,8 @@ class UDRL:
         self.device = device
 
         # TODO: Add size from info
-        # self.state_size = self.env.observation_space.shape[0] + 8
-        self.state_size = 10
+        self.state_size = self.env.observation_space.shape[0]
+        # self.state_size = 10
         self.action_size = self.env.action_space.n
 
         if params is None:
@@ -25,7 +25,7 @@ class UDRL:
             self.params = params
 
     def get_action(self, policy, state, command) -> int:
-        state_input = torch.FloatTensor(state).to(self.device)
+        state_input = torch.FloatTensor(np.array([state])).to(self.device)
         command_input = torch.FloatTensor(command).to(self.device)
 
         action = policy(state_input, command_input)
@@ -192,16 +192,16 @@ class UDRL:
 
         buffer.sort()
 
-    def __train_behavior(self, behavior, buffer):
+    def __train_behavior(self, behavior: Behavior, buffer: ReplayBuffer):
         all_loss = []
         for update in range(self.params.n_updates_per_iter):
             episodes = buffer.random_batch(self.params.batch_size)
 
-            batch_states = []
-            batch_commands = []
-            batch_actions = []
+            batch_states = np.ndarray(shape=(self.params.batch_size, 3, 240, 256))
+            batch_commands = np.ndarray(shape=(self.params.batch_size, 2), dtype=np.int32)
+            batch_actions = np.ndarray(shape=(self.params.batch_size,), dtype=np.uint8)
 
-            for episode in episodes:
+            for i, episode in enumerate(episodes):
                 # noinspection PyPep8Naming
                 T = episode.length
                 t1 = np.random.randint(0, T)
@@ -209,14 +209,11 @@ class UDRL:
                 dr = sum(episode.rewards[t1:t2])
                 dh = t2 - t1
 
-                st1 = episode.states[t1]
-                at1 = episode.actions[t1]
+                batch_states[i] = episode.states[t1]
+                batch_actions[i] = episode.actions[t1]
+                batch_commands[i] = np.array([dr, dh], dtype=np.int32)
 
-                batch_states.append(st1)
-                batch_actions.append(at1)
-                batch_commands.append([dr, dh])
-
-            batch_states = torch.FloatTensor(batch_states).to(self.device)
+            batch_states = torch.FloatTensor(np.array(batch_states)).to(self.device)
             batch_commands = torch.FloatTensor(batch_commands).to(self.device)
             batch_actions = torch.LongTensor(batch_actions).to(self.device)
 
@@ -250,6 +247,8 @@ class UDRL:
     @staticmethod
     def __preprocess_state(state: np.ndarray, info: dict):
         # TODO: Find a way to join state and info
+        state = np.transpose(state, axes=(2, 0, 1))
+        return state
 
         info["flag_get"] = float(info["flag_get"])
         if info["status"] == "small":

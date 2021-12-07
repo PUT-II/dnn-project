@@ -3,7 +3,7 @@ class TrainParams:
     def __init__(
             self,
             n_main_iter=100,
-            batch_size=768,
+            batch_size=32,
             horizon_scale=0.01,
             last_few=75,
             learning_rate=0.0003,
