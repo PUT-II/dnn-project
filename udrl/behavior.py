@@ -7,15 +7,19 @@ from torch.optim import Adam
 
 
 class Behavior(nn.Module):
-    def __init__(self,
-                 state_size,
-                 action_size,
-                 device,
-                 command_scale: list = None):
+    def __init__(
+            self,
+            state_size,
+            action_size,
+            device,
+            command_scale: list = None
+    ):
         if command_scale is None:
             command_scale = [1, 1]
 
         super().__init__()
+
+        # TODO: Investigate neural network with multiple inputs (state and info)
 
         self.command_scale = torch.FloatTensor(command_scale).to(device)
 

@@ -17,23 +17,20 @@ behavior = Behavior(state_size=10,
 
 behavior.load('behavior_mario.pth')
 
+agent = UDRL(env, device)
+
 done = False
 env.reset()
-_, reward, _, state = env.step(0)
-state = UDRL.preprocess_state(state)
+state, reward, _ = agent.step(0)  # NOOP
 for step in range(5000):
     if done:
         env.reset()
-        _, reward, done, state = env.step(0)
-        state = UDRL.preprocess_state(state)
+        state, reward, done = agent.step(0)  # NOOP
 
     # state = image
     # info = information about player
-    state_input = torch.FloatTensor(state).to(device)
-    command_input = torch.FloatTensor([302, 400]).to(device)
-    action = behavior.action(state_input, command_input)
-    _, _, done, state = env.step(action)
-    state = UDRL.preprocess_state(state)
+    action = agent.get_action(behavior.action, state, [302, 400])
+    state, _, done = agent.step(action)
 
     env.render()
 

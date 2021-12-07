@@ -14,127 +14,63 @@ class UDRL:
         self.env = env
         self.device = device
 
+        # TODO: Add size from info
+        # self.state_size = self.env.observation_space.shape[0] + 8
+        self.state_size = 10
+        self.action_size = self.env.action_space.n
+
         if params is None:
             self.params = TrainParams()
         else:
             self.params = params
 
-    @staticmethod
-    def preprocess_state(state):
-        state["flag_get"] = float(state["flag_get"])
-        if state["status"] == "small":
-            state["status"] = 0.25
-        elif state["status"] == "tall":
-            state["status"] = 0.75
-        elif state["status"] == "fireball":
-            state["status"] = 1.0
-        else:
-            state["status"] = 0.0
-        return list(state.values())
+    def get_action(self, policy, state, command) -> int:
+        state_input = torch.FloatTensor(state).to(self.device)
+        command_input = torch.FloatTensor(command).to(self.device)
 
-    def generate_episode(self, policy, init_command: list = None):
-        if init_command is None:
-            init_command = [1, 1]
+        action = policy(state_input, command_input)
+        return action
 
-        command = init_command.copy()
-        desired_return = command[0]
-        desired_horizon = command[1]
+    def step(self, action: int):
+        state, reward, done, info = self.env.step(action)
+        state = self.__preprocess_state(state, info)
+        return state, reward, done
 
-        states = []
-        actions = []
-        rewards = []
+    def train(self, buffer=None, behavior=None, learning_history: list = None):
+        if learning_history is None:
+            learning_history = []
 
-        time_steps = 0
-        done = False
-        self.env.reset()
-        _, reward, _, state = self.env.step(0)  # NOOP
-        state = self.preprocess_state(state)
+        if buffer is None:
+            buffer = self.__initialize_replay_buffer()
 
-        while not done:
-            state_input = torch.FloatTensor(state).to(self.device)
-            command_input = torch.FloatTensor(command).to(self.device)
-            action = policy(state_input, command_input)
-            _, reward, done, next_state = self.env.step(action)
+        if behavior is None:
+            behavior = self.__initialize_behavior_function()
 
-            if not done and time_steps > self.params.max_steps:
-                done = True
-                reward = self.params.max_steps_reward
+        for i in range(1, self.params.n_main_iter + 1):
+            mean_loss = self.__train_behavior(behavior, buffer)
 
-            states.append(state)
-            actions.append(action)
-            rewards.append(reward)
+            print(f"Iter: {i}, Loss: {mean_loss:.4f}")
 
-            state = self.preprocess_state(next_state)
+            # Sample exploratory commands and generate episodes
+            self.__generate_episodes(behavior, buffer)
 
-            # Clipped such that it's upper-bounded by the maximum return achievable in the env
-            desired_return = min(desired_return - reward, self.params.max_reward)
+            if i % self.params.evaluate_every == 0:
+                command = self.__sample_command(buffer)
+                mean_return = self.__evaluate_agent(behavior, command)
 
-            # Make sure it's always a valid horizon
-            desired_horizon = max(desired_horizon - 1, 1)
+                learning_history.append({
+                    'training_loss': mean_loss,
+                    'desired_return': command[0],
+                    'desired_horizon': command[1],
+                    'actual_return': mean_return,
+                })
 
-            command = [desired_return, desired_horizon]
-            time_steps += 1
+                if self.params.stop_on_solved and mean_return >= self.params.target_return:
+                    break
 
-        return make_episode(states, actions, rewards, init_command, sum(rewards), time_steps)
+        return behavior, buffer, learning_history
 
-    @staticmethod
-    def sample_command(buffer, last_few):
-        if len(buffer) == 0:
-            return [1, 1]
-
-        commands = buffer.get(last_few)
-
-        lengths = [command.length for command in commands]
-        desired_horizon = np.round(np.mean(lengths))
-
-        returns = [command.total_return for command in commands]
-        mean_return, std_return = np.mean(returns), np.std(returns)
-        desired_return = np.random.uniform(mean_return, mean_return + std_return)
-
-        return [desired_return, desired_horizon]
-
-    def initialize_replay_buffer(self, replay_size, n_episodes, last_few):
-        def random_policy(_1, _2):
-            return np.random.randint(self.env.action_space.n)
-
-        buffer = ReplayBuffer(replay_size)
-
-        for i in range(n_episodes):
-            command = self.sample_command(buffer, last_few)
-            episode = self.generate_episode(random_policy, command)  # See Algorithm 2
-            buffer.add(episode)
-
-        buffer.sort()
-        return buffer
-
-    def initialize_behavior_function(
-            self,
-            state_size,
-            action_size,
-            learning_rate,
-            command_scale
-    ):
-        behavior = Behavior(state_size,
-                            action_size,
-                            self.device,
-                            command_scale)
-
-        behavior.init_optimizer(lr=learning_rate)
-
-        return behavior
-
-    def generate_episodes(self, behavior, buffer, last_few):
-        def stochastic_policy(state_, command_):
-            behavior.action(state_, command_)
-
-        for i in range(self.params.n_episodes_per_iter):
-            command = self.sample_command(buffer, last_few)
-            episode = self.generate_episode(stochastic_policy, command)  # See Algorithm 2
-            buffer.add(episode)
-
-        buffer.sort()
-
-    def evaluate_agent(self, behavior, command, render=False):
+    def __evaluate_agent(self, behavior, command, render=False):
         behavior.eval()
 
         print('\nEvaluation.', end=' ')
@@ -150,8 +86,7 @@ class UDRL:
             done = False
             total_reward = 0
             self.env.reset()
-            _, reward, _, state = self.env.step(0)  # NOOP
-            state = self.preprocess_state(state)
+            state, reward, _ = self.step(0)  # NOOP
 
             while not done:
                 if render:
@@ -161,10 +96,10 @@ class UDRL:
                 command_input = torch.FloatTensor(command).to(self.device)
 
                 action = behavior.greedy_action(state_input, command_input)
-                _, reward, done, next_state = self.env.step(action)
+                next_state, reward, done = self.step(action)
 
                 total_reward += reward
-                state = self.preprocess_state(next_state)
+                state = next_state
 
                 desired_return = min(desired_return - reward, self.params.max_reward)
                 desired_horizon = max(desired_horizon - 1, 1)
@@ -183,54 +118,84 @@ class UDRL:
 
         return mean_return
 
-    def train(self, buffer=None, behavior=None, learning_history: list = None):
-        if learning_history is None:
-            learning_history = []
+    def __generate_episode(self, policy, init_command: list = None):
+        if init_command is None:
+            init_command = [1, 1]
 
-        if buffer is None:
-            buffer = self.initialize_replay_buffer(self.params.replay_size, self.params.n_warm_up_episodes,
-                                                   self.params.last_few)
+        command = init_command.copy()
+        desired_return = command[0]
+        desired_horizon = command[1]
 
-        if behavior is None:
-            # TODO: Get state size from env
-            # state_size = env.observation_space.shape[0]
-            state_size = 10
-            action_size = self.env.action_space.n
-            behavior = self.initialize_behavior_function(state_size,
-                                                         action_size,
-                                                         self.params.learning_rate,
-                                                         [self.params.return_scale, self.params.horizon_scale])
+        states = []
+        actions = []
+        rewards = []
 
-        for i in range(1, self.params.n_main_iter + 1):
-            mean_loss = self.train_behavior(behavior, buffer, self.params.n_updates_per_iter, self.params.batch_size)
+        time_steps = 0
+        done = False
+        self.env.reset()
+        state, reward, _ = self.step(0)  # NOOP
 
-            print(f"Iter: {i}, Loss: {mean_loss:.4f}")
+        while not done:
+            action = self.get_action(policy, state, command)
+            next_state, reward, done = self.step(action)
 
-            # Sample exploratory commands and generate episodes
-            self.generate_episodes(behavior,
-                                   buffer,
-                                   self.params.last_few)
+            if not done and time_steps > self.params.max_steps:
+                done = True
+                reward = self.params.max_steps_reward
 
-            if i % self.params.evaluate_every == 0:
-                command = self.sample_command(buffer, self.params.last_few)
-                mean_return = self.evaluate_agent(behavior, command)
+            states.append(state)
+            actions.append(action)
+            rewards.append(reward)
 
-                learning_history.append({
-                    'training_loss': mean_loss,
-                    'desired_return': command[0],
-                    'desired_horizon': command[1],
-                    'actual_return': mean_return,
-                })
+            state = next_state
 
-                if self.params.stop_on_solved and mean_return >= self.params.target_return:
-                    break
+            # Clipped such that it's upper-bounded by the maximum return achievable in the env
+            desired_return = min(desired_return - reward, self.params.max_reward)
 
-        return behavior, buffer, learning_history
+            # Make sure it's always a valid horizon
+            desired_horizon = max(desired_horizon - 1, 1)
 
-    def train_behavior(self, behavior, buffer, n_updates, batch_size):
+            command = [desired_return, desired_horizon]
+            time_steps += 1
+
+        return make_episode(states, actions, rewards, init_command, sum(rewards), time_steps)
+
+    def __initialize_replay_buffer(self):
+        def random_policy(_1, _2):
+            return np.random.randint(self.env.action_space.n)
+
+        buffer = ReplayBuffer(self.params.replay_size)
+
+        for i in range(self.params.n_warm_up_episodes):
+            command = self.__sample_command(buffer)
+            episode = self.__generate_episode(random_policy, command)  # See Algorithm 2
+            buffer.add(episode)
+
+        buffer.sort()
+        return buffer
+
+    def __initialize_behavior_function(self):
+        behavior = Behavior(self.state_size,
+                            self.action_size,
+                            self.device,
+                            [self.params.return_scale, self.params.horizon_scale])
+
+        behavior.init_optimizer(lr=self.params.learning_rate)
+
+        return behavior
+
+    def __generate_episodes(self, behavior, buffer):
+        for i in range(self.params.n_episodes_per_iter):
+            command = self.__sample_command(buffer)
+            episode = self.__generate_episode(behavior.action, command)  # See Algorithm 2
+            buffer.add(episode)
+
+        buffer.sort()
+
+    def __train_behavior(self, behavior, buffer):
         all_loss = []
-        for update in range(n_updates):
-            episodes = buffer.random_batch(batch_size)
+        for update in range(self.params.n_updates_per_iter):
+            episodes = buffer.random_batch(self.params.batch_size)
 
             batch_states = []
             batch_commands = []
@@ -266,3 +231,33 @@ class UDRL:
             all_loss.append(loss.item())
 
         return np.mean(all_loss)
+
+    def __sample_command(self, buffer):
+        if len(buffer) == 0:
+            return [1, 1]
+
+        commands = buffer.get(self.params.last_few)
+
+        lengths = [command.length for command in commands]
+        desired_horizon = np.round(np.mean(lengths))
+
+        returns = [command.total_return for command in commands]
+        mean_return, std_return = np.mean(returns), np.std(returns)
+        desired_return = np.random.uniform(mean_return, mean_return + std_return)
+
+        return [desired_return, desired_horizon]
+
+    @staticmethod
+    def __preprocess_state(state: np.ndarray, info: dict):
+        # TODO: Find a way to join state and info
+
+        info["flag_get"] = float(info["flag_get"])
+        if info["status"] == "small":
+            info["status"] = 0.25
+        elif info["status"] == "tall":
+            info["status"] = 0.75
+        elif info["status"] == "fireball":
+            info["status"] = 1.0
+        else:
+            info["status"] = 0.0
+        return list(info.values())
