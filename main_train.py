@@ -12,7 +12,7 @@ env = JoypadSpace(env, SIMPLE_MOVEMENT)
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-params = TrainParams()
+params = TrainParams(save_on_eval=True)
 algorithm = udrl.UDRL(env, device, params)
 
 behavior, buffer, learning_history = algorithm.train()

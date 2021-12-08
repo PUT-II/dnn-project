@@ -19,11 +19,8 @@ class Behavior(nn.Module):
 
         super().__init__()
 
-        # TODO: Investigate neural network with multiple inputs (state and info)
-
         self.command_scale = torch.FloatTensor(command_scale).to(device)
 
-        # self.state_fc = nn.Sequential(nn.Linear(state_size, 64), nn.Tanh())
         self.state_fc = nn.Sequential(
             nn.Conv2d(in_channels=3, out_channels=32, kernel_size=(8, 8), stride=(4, 1)),
             nn.ReLU(),

@@ -1,3 +1,5 @@
+from time import time
+
 import numpy as np
 import torch
 import torch.nn.functional as nn_functional
@@ -14,7 +16,6 @@ class UDRL:
         self.env = env
         self.device = device
 
-        # TODO: Add size from info
         self.state_size = self.env.observation_space.shape[0]
         # self.state_size = 10
         self.action_size = self.env.action_space.n
@@ -24,8 +25,8 @@ class UDRL:
         else:
             self.params = params
 
-    def get_action(self, policy, state, command) -> int:
-        state_input = torch.FloatTensor(np.array([state])).to(self.device)
+    def get_action(self, policy, state: np.ndarray, command) -> int:
+        state_input = torch.FloatTensor(np.ascontiguousarray(np.expand_dims(state, axis=0))).to(self.device)
         command_input = torch.FloatTensor(command).to(self.device)
 
         action = policy(state_input, command_input)
@@ -47,12 +48,15 @@ class UDRL:
             behavior = self.__initialize_behavior_function()
 
         for i in range(1, self.params.n_main_iter + 1):
+            time_start = time()
             mean_loss = self.__train_behavior(behavior, buffer)
 
-            print(f"Iter: {i}, Loss: {mean_loss:.4f}")
+            print(f"Iter: {i}, Loss: {mean_loss:.4f}, ", end="")
 
             # Sample exploratory commands and generate episodes
-            self.__generate_episodes(behavior, buffer)
+            buffer = self.__generate_episodes(behavior, buffer)
+
+            print(f"Took: {time() - time_start:.4f}s")
 
             if i % self.params.evaluate_every == 0:
                 command = self.__sample_command(buffer)
@@ -64,6 +68,11 @@ class UDRL:
                     'desired_horizon': command[1],
                     'actual_return': mean_return,
                 })
+
+                if self.params.save_on_eval:
+                    behavior.save('behavior_latest.pth')
+                    buffer.save('buffer_latest.npy')
+                    np.save('history_latest.npy', np.array(learning_history, dtype=object))
 
                 if self.params.stop_on_solved and mean_return >= self.params.target_return:
                     break
@@ -92,10 +101,7 @@ class UDRL:
                 if render:
                     self.env.render()
 
-                state_input = torch.FloatTensor(state).to(self.device)
-                command_input = torch.FloatTensor(command).to(self.device)
-
-                action = behavior.greedy_action(state_input, command_input)
+                action = self.get_action(behavior.greedy_action, state, command)
                 next_state, reward, done = self.step(action)
 
                 total_reward += reward
@@ -118,7 +124,7 @@ class UDRL:
 
         return mean_return
 
-    def __generate_episode(self, policy, init_command: list = None):
+    def __generate_episode(self, policy, init_command: list = None) -> make_episode:
         if init_command is None:
             init_command = [1, 1]
 
@@ -160,21 +166,21 @@ class UDRL:
 
         return make_episode(states, actions, rewards, init_command, sum(rewards), time_steps)
 
-    def __initialize_replay_buffer(self):
+    def __initialize_replay_buffer(self) -> ReplayBuffer:
         def random_policy(_1, _2):
             return np.random.randint(self.env.action_space.n)
 
-        buffer = ReplayBuffer(self.params.replay_size)
+        buffer = ReplayBuffer()
 
         for i in range(self.params.n_warm_up_episodes):
             command = self.__sample_command(buffer)
             episode = self.__generate_episode(random_policy, command)  # See Algorithm 2
-            buffer.add(episode)
+            buffer.append(episode)
 
         buffer.sort()
-        return buffer
+        return buffer.get_n_first(self.params.replay_size)
 
-    def __initialize_behavior_function(self):
+    def __initialize_behavior_function(self) -> Behavior:
         behavior = Behavior(self.state_size,
                             self.action_size,
                             self.device,
@@ -184,15 +190,16 @@ class UDRL:
 
         return behavior
 
-    def __generate_episodes(self, behavior, buffer):
+    def __generate_episodes(self, behavior, buffer: ReplayBuffer):
         for i in range(self.params.n_episodes_per_iter):
             command = self.__sample_command(buffer)
             episode = self.__generate_episode(behavior.action, command)  # See Algorithm 2
-            buffer.add(episode)
+            buffer.append(episode)
 
         buffer.sort()
+        return buffer.get_n_first(self.params.replay_size)
 
-    def __train_behavior(self, behavior: Behavior, buffer: ReplayBuffer):
+    def __train_behavior(self, behavior: Behavior, buffer: ReplayBuffer) -> np.float64:
         all_loss = []
         for update in range(self.params.n_updates_per_iter):
             episodes = buffer.random_batch(self.params.batch_size)
@@ -227,13 +234,14 @@ class UDRL:
 
             all_loss.append(loss.item())
 
+        # noinspection PyTypeChecker
         return np.mean(all_loss)
 
-    def __sample_command(self, buffer):
+    def __sample_command(self, buffer: ReplayBuffer):
         if len(buffer) == 0:
             return [1, 1]
 
-        commands = buffer.get(self.params.last_few)
+        commands = buffer.get_n_last(self.params.last_few)
 
         lengths = [command.length for command in commands]
         desired_horizon = np.round(np.mean(lengths))
@@ -246,17 +254,5 @@ class UDRL:
 
     @staticmethod
     def __preprocess_state(state: np.ndarray, info: dict):
-        # TODO: Find a way to join state and info
         state = np.transpose(state, axes=(2, 0, 1))
         return state
-
-        info["flag_get"] = float(info["flag_get"])
-        if info["status"] == "small":
-            info["status"] = 0.25
-        elif info["status"] == "tall":
-            info["status"] = 0.75
-        elif info["status"] == "fireball":
-            info["status"] = 1.0
-        else:
-            info["status"] = 0.0
-        return list(info.values())
