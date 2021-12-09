@@ -6,10 +6,10 @@ from torch.distributions import Categorical
 from torch.optim import Adam
 
 
+# TODO: Try add info as input
 class Behavior(nn.Module):
     def __init__(
             self,
-            state_size,
             action_size,
             device,
             command_scale: list = None
@@ -19,22 +19,28 @@ class Behavior(nn.Module):
 
         super().__init__()
 
-        # TODO: Investigate neural network with multiple inputs (state and info)
-
         self.command_scale = torch.FloatTensor(command_scale).to(device)
 
-        self.state_fc = nn.Sequential(nn.Linear(state_size, 64),
-                                      nn.Tanh())
+        self.state_fc = nn.Sequential(
+            nn.Conv2d(in_channels=3, out_channels=32, kernel_size=(8, 8), stride=(4, 1)),
+            nn.ReLU(),
+            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=(4, 4), stride=(2, 1)),
+            nn.ReLU(),
+            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=(3, 3), stride=(1, 1)),
+            nn.ReLU(),
+            nn.Flatten(),
+            nn.Linear(in_features=406016, out_features=512),
+            # TODO: Check without last layer or increase out_features
+            nn.Linear(in_features=512, out_features=1)
+        )
 
         self.command_fc = nn.Sequential(nn.Linear(2, 64),
                                         nn.Sigmoid())
 
         self.output_fc = nn.Sequential(nn.Linear(64, 128),
                                        nn.ReLU(),
-                                       # nn.Dropout(0.2),
                                        nn.Linear(128, 128),
                                        nn.ReLU(),
-                                       # nn.Dropout(0.2),
                                        nn.Linear(128, 128),
                                        nn.ReLU(),
                                        nn.Linear(128, action_size))
