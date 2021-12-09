@@ -6,10 +6,10 @@ from torch.distributions import Categorical
 from torch.optim import Adam
 
 
+# TODO: Try add info as input
 class Behavior(nn.Module):
     def __init__(
             self,
-            state_size,
             action_size,
             device,
             command_scale: list = None
@@ -30,6 +30,7 @@ class Behavior(nn.Module):
             nn.ReLU(),
             nn.Flatten(),
             nn.Linear(in_features=406016, out_features=512),
+            # TODO: Check without last layer or increase out_features
             nn.Linear(in_features=512, out_features=1)
         )
 
@@ -38,10 +39,8 @@ class Behavior(nn.Module):
 
         self.output_fc = nn.Sequential(nn.Linear(64, 128),
                                        nn.ReLU(),
-                                       # nn.Dropout(0.2),
                                        nn.Linear(128, 128),
                                        nn.ReLU(),
-                                       # nn.Dropout(0.2),
                                        nn.Linear(128, 128),
                                        nn.ReLU(),
                                        nn.Linear(128, action_size))

@@ -181,8 +181,7 @@ class UDRL:
         return buffer.get_n_first(self.params.replay_size)
 
     def __initialize_behavior_function(self) -> Behavior:
-        behavior = Behavior(self.state_size,
-                            self.action_size,
+        behavior = Behavior(self.action_size,
                             self.device,
                             [self.params.return_scale, self.params.horizon_scale])
 

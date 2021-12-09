@@ -10,8 +10,7 @@ env = gym_super_mario_bros.make('SuperMarioBros-v1')
 env = JoypadSpace(env, SIMPLE_MOVEMENT)
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-behavior = Behavior(state_size=10,
-                    action_size=env.action_space.n,
+behavior = Behavior(action_size=env.action_space.n,
                     device=device,
                     command_scale=[0.02, 0.01])
 
