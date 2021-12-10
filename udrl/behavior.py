@@ -31,13 +31,13 @@ class Behavior(nn.Module):
             nn.Flatten(),
             nn.Linear(in_features=406016, out_features=512),
             # TODO: Check without last layer or increase out_features
-            nn.Linear(in_features=512, out_features=1)
+            # nn.Linear(in_features=512, out_features=1)
         )
 
-        self.command_fc = nn.Sequential(nn.Linear(2, 64),
+        self.command_fc = nn.Sequential(nn.Linear(2, 512),
                                         nn.Sigmoid())
 
-        self.output_fc = nn.Sequential(nn.Linear(64, 128),
+        self.output_fc = nn.Sequential(nn.Linear(512, 128),
                                        nn.ReLU(),
                                        nn.Linear(128, 128),
                                        nn.ReLU(),
