@@ -32,7 +32,7 @@ class ReplayBuffer:
     def load(self, filename):
         raw_buffer: np.array = np.load(filename)
         # e stands for episode
-        self.__array = [make_episode(e[0], e[1], e[2], e[3], e[4], e[5]) for e in raw_buffer]
+        self.__array = [make_episode(e[0], e[1], e[2], e[3], e[4], e[5], e[6]) for e in raw_buffer]
 
     def __len__(self) -> int:
         return len(self.__array)

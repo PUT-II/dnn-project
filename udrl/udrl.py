@@ -11,6 +11,7 @@ from udrl.util import make_episode
 
 
 class UDRL:
+    __STATE_SIZE = (128, 128)
 
     def __init__(self, env, device, params: TrainParams = None):
         self.env = env
@@ -19,23 +20,26 @@ class UDRL:
         self.state_size = self.env.observation_space.shape[0]
         # self.state_size = 10
         self.action_size = self.env.action_space.n
+        self.info_size = 3
 
         if params is None:
             self.params = TrainParams()
         else:
             self.params = params
 
-    def get_action(self, policy, state: np.ndarray, command) -> int:
-        state_input = torch.FloatTensor(np.ascontiguousarray(np.expand_dims(state, axis=0))).to(self.device)
+    def get_action(self, policy, state: np.ndarray, command, info) -> int:
+        state_input = torch.FloatTensor(np.ascontiguousarray(np.expand_dims(state, axis=(0, 1)))).to(self.device)
         command_input = torch.FloatTensor(command).to(self.device)
+        info_input = torch.FloatTensor(info).to(self.device)
 
-        action = policy(state_input, command_input)
+        action = policy(state_input, command_input, info_input)
         return action
 
     def step(self, action: int):
         state, reward, done, info = self.env.step(action)
-        state = self.__preprocess_state(state, info)
-        return state, reward, done
+        state = self.preprocess_state(state)
+        info = self.__preprocess_info(info)
+        return state, reward, done, info
 
     def train(self, buffer=None, behavior=None, learning_history: list = None):
         if learning_history is None:
@@ -94,15 +98,15 @@ class UDRL:
         for e in range(self.params.n_evals):
             done = False
             total_reward = 0
-            self.env.reset()
-            state, reward, _ = self.step(0)  # NOOP
+            state = self.preprocess_state(self.env.reset())
+            info = [0.0, 0.0, 0.0]
 
             while not done:
                 if render:
                     self.env.render()
 
-                action = self.get_action(behavior.greedy_action, state, command)
-                next_state, reward, done = self.step(action)
+                action = self.get_action(behavior.greedy_action, state, command, info)
+                next_state, reward, done, info = self.step(action)
 
                 total_reward += reward
                 state = next_state
@@ -134,26 +138,33 @@ class UDRL:
 
         states = []
         actions = []
+        infos = []
         rewards = []
 
         time_steps = 0
         done = False
-        self.env.reset()
-        state, reward, _ = self.step(0)  # NOOP
+        state = self.preprocess_state(self.env.reset())
+        info = [0.0, 0.0, 0.0]
 
         while not done:
-            action = self.get_action(policy, state, command)
-            next_state, reward, done = self.step(action)
+            action = self.get_action(policy, state, command, info)
+            next_state, reward, done, next_info = self.step(action)
+
+            if not done and time_steps % self.params.skip_every_n_observations != 0:
+                time_steps += 1
+                continue
 
             if not done and time_steps > self.params.max_steps:
                 done = True
                 reward = self.params.max_steps_reward
 
             states.append(state)
+            infos.append(info)
             actions.append(action)
             rewards.append(reward)
 
             state = next_state
+            info = next_info
 
             # Clipped such that it's upper-bounded by the maximum return achievable in the env
             desired_return = min(desired_return - reward, self.params.max_reward)
@@ -164,10 +175,10 @@ class UDRL:
             command = [desired_return, desired_horizon]
             time_steps += 1
 
-        return make_episode(states, actions, rewards, init_command, sum(rewards), time_steps)
+        return make_episode(states, actions, infos, rewards, init_command, sum(rewards), len(states))
 
     def __initialize_replay_buffer(self) -> ReplayBuffer:
-        def random_policy(_1, _2):
+        def random_policy(*_):
             return np.random.randint(self.env.action_space.n)
 
         buffer = ReplayBuffer()
@@ -181,9 +192,12 @@ class UDRL:
         return buffer.get_n_first(self.params.replay_size)
 
     def __initialize_behavior_function(self) -> Behavior:
-        behavior = Behavior(self.action_size,
-                            self.device,
-                            [self.params.return_scale, self.params.horizon_scale])
+        behavior = Behavior(
+            action_size=self.action_size,
+            info_size=self.info_size,
+            device=self.device,
+            command_scale=[self.params.return_scale, self.params.horizon_scale]
+        )
 
         behavior.init_optimizer(lr=self.params.learning_rate)
 
@@ -203,9 +217,10 @@ class UDRL:
         for update in range(self.params.n_updates_per_iter):
             episodes = buffer.random_batch(self.params.batch_size)
 
-            batch_states = np.ndarray(shape=(self.params.batch_size, 3, 240, 256))
+            batch_states = np.ndarray(shape=(self.params.batch_size, 1) + self.__STATE_SIZE)
             batch_commands = np.ndarray(shape=(self.params.batch_size, 2), dtype=np.int32)
             batch_actions = np.ndarray(shape=(self.params.batch_size,), dtype=np.uint8)
+            batch_info = np.ndarray(shape=(self.params.batch_size, 3), dtype=np.float32)
 
             for i, episode in enumerate(episodes):
                 # noinspection PyPep8Naming
@@ -215,17 +230,20 @@ class UDRL:
                 dr = sum(episode.rewards[t1:t2])
                 dh = t2 - t1
 
-                batch_states[i] = episode.states[t1]
+                batch_states[i][0] = episode.states[t1]
                 batch_actions[i] = episode.actions[t1]
                 batch_commands[i] = np.array([dr, dh], dtype=np.int32)
+                batch_info[i] = episode.infos[t1]
 
-            batch_states = torch.FloatTensor(np.array(batch_states)).to(self.device)
-            batch_commands = torch.FloatTensor(batch_commands).to(self.device)
-            batch_actions = torch.LongTensor(batch_actions).to(self.device)
+            batch_states_in = torch.FloatTensor(np.array(batch_states)).to(self.device)
+            batch_commands_in = torch.FloatTensor(batch_commands).to(self.device)
+            batch_info_in = torch.FloatTensor(batch_info).to(self.device)
 
-            pred = behavior(batch_states, batch_commands)
+            batch_actions_in = torch.LongTensor(batch_actions).to(self.device)
 
-            loss = nn_functional.cross_entropy(pred, batch_actions)
+            pred = behavior.forward(batch_states_in, batch_commands_in, batch_info_in)
+
+            loss = nn_functional.cross_entropy(pred, batch_actions_in)
 
             behavior.optim.zero_grad()
             loss.backward()
@@ -252,6 +270,24 @@ class UDRL:
         return [desired_return, desired_horizon]
 
     @staticmethod
-    def __preprocess_state(state: np.ndarray, info: dict):
-        state = np.transpose(state, axes=(2, 0, 1))
-        return state
+    def preprocess_state(state: np.ndarray):
+        import cv2 as cv
+
+        grayscale = cv.cvtColor(state, cv.COLOR_RGB2GRAY)
+        rescaled = cv.resize(grayscale, UDRL.__STATE_SIZE)
+
+        return rescaled
+
+    @staticmethod
+    def __preprocess_info(info: dict) -> np.array:
+        status = info["status"]
+        status_numeric = 0
+        if status == "small":
+            status_numeric = 0.25
+        elif status == "tall":
+            status_numeric = 0.5
+        elif status == "fireball":
+            status_numeric = 0.75
+
+        info_out = [float(info["x_pos"]) / 256.0, float(info["y_pos"]) / 240.0, status_numeric]
+        return np.array(info_out, dtype=np.float32)

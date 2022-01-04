@@ -10,26 +10,28 @@ env = gym_super_mario_bros.make('SuperMarioBros-v1')
 env = JoypadSpace(env, SIMPLE_MOVEMENT)
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-behavior = Behavior(action_size=env.action_space.n,
-                    device=device,
-                    command_scale=[0.02, 0.01])
+behavior = Behavior(
+    action_size=env.action_space.n,
+    info_size=3,
+    device=device,
+    command_scale=[0.02, 0.01]
+)
 
-behavior.load('behavior_mario.pth')
+behavior.load('behavior_latest.pth')
 
 agent = UDRL(env, device)
 
 done = False
-env.reset()
-state, reward, _ = agent.step(0)  # NOOP
+state = agent.preprocess_state(env.reset())
+info = [0.0, 0.0, 0.0]
 for step in range(5000):
     if done:
-        env.reset()
-        state, reward, done = agent.step(0)  # NOOP
+        break
 
-    # state = image
-    # info = information about player
-    action = agent.get_action(behavior.action, state, [302, 400])
-    state, _, done = agent.step(action)
+    # state --> image
+    # info --> information about mario
+    action = agent.get_action(behavior.action, state, [300, 400], info)
+    state, _, done, info = agent.step(action)
 
     env.render()
 
