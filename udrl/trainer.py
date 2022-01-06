@@ -47,13 +47,14 @@ class UdrlTrainer:
             buffer = self.__initialize_replay_buffer()
 
         if behavior is None:
-            behavior = self.__initialize_behavior_function()
+            behavior = self.initialize_behavior_function()
 
         for i in range(1, self.params.n_main_iter + 1):
             time_start = time()
+            print(f"Iter: {i}, ", end="")
             mean_loss = self.__train_behavior(behavior, buffer)
 
-            print(f"Iter: {i}, Loss: {mean_loss:.4f}, ", end="")
+            print(f"Loss: {mean_loss:.4f}, ", end="")
 
             # Sample exploratory commands and generate episodes
             buffer = self.__generate_episodes(behavior, buffer)
@@ -80,6 +81,18 @@ class UdrlTrainer:
                     break
 
         return behavior, buffer, learning_history
+
+    def initialize_behavior_function(self) -> Behavior:
+        behavior = Behavior(
+            action_size=self.action_size,
+            info_size=self.info_size,
+            device=self.device,
+            command_scale=[self.params.return_scale, self.params.horizon_scale]
+        )
+
+        behavior.init_optimizer(lr=self.params.learning_rate)
+
+        return behavior
 
     def __evaluate_behavior(self, behavior, command, render=False):
         behavior.eval()
@@ -109,8 +122,10 @@ class UdrlTrainer:
                 total_reward += reward
                 state = next_state
 
-                desired_return = clip_reward(desired_return - reward, self.params.min_reward, self.params.max_reward)
                 desired_horizon = max(desired_horizon - 1, 1)
+                min_reward = self.params.min_reward * desired_horizon
+                max_reward = self.params.max_reward * desired_horizon
+                desired_return = clip_reward(desired_return - reward, min_reward, max_reward)
 
                 command = [desired_return, desired_horizon]
 
@@ -154,7 +169,7 @@ class UdrlTrainer:
 
             if not done and time_steps > self.params.max_steps:
                 done = True
-                reward = self.params.max_steps_reward
+                reward = self.params.max_steps_penalty
 
             states.append(state)
             infos.append(info)
@@ -164,11 +179,14 @@ class UdrlTrainer:
             state = next_state
             info = next_info
 
-            # Clipped such that it's upper-bounded by the maximum return achievable in the env
-            desired_return = clip_reward(desired_return - reward, self.params.min_reward, self.params.max_reward)
-
             # Make sure it's always a valid horizon
             desired_horizon = max(desired_horizon - 1, 1)
+
+            # Clipped such that it's upper-bounded by the maximum return achievable in the env
+            desired_horizon = max(desired_horizon - 1, 1)
+            min_reward = self.params.min_reward * desired_horizon
+            max_reward = self.params.max_reward * desired_horizon
+            desired_return = clip_reward(desired_return - reward, min_reward, max_reward)
 
             command = [desired_return, desired_horizon]
             time_steps += 1
@@ -188,18 +206,6 @@ class UdrlTrainer:
 
         buffer.sort()
         return buffer[:self.params.replay_size]
-
-    def __initialize_behavior_function(self) -> Behavior:
-        behavior = Behavior(
-            action_size=self.action_size,
-            info_size=self.info_size,
-            device=self.device,
-            command_scale=[self.params.return_scale, self.params.horizon_scale]
-        )
-
-        behavior.init_optimizer(lr=self.params.learning_rate)
-
-        return behavior
 
     def __generate_episodes(self, behavior, buffer: ReplayBuffer):
         for i in range(self.params.n_episodes_per_iter):

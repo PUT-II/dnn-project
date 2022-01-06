@@ -50,18 +50,17 @@ class ReplayBuffer:
         commands = self.__array[-last_few:]
 
         lengths = [command.length for command in commands]
-        desired_horizon = np.round(np.mean(lengths))
-
         returns = [command.total_return for command in commands]
         mean_return, std_return = np.mean(returns), np.std(returns)
-        desired_return = np.random.uniform(mean_return, mean_return + std_return)
 
+        desired_horizon = np.round(np.mean(lengths))
+        desired_return = np.random.uniform(mean_return, mean_return + std_return)
         return [desired_return, desired_horizon]
 
     def save(self, filename):
         np.save(filename, np.array(self.__array, dtype=object))
 
     def load(self, filename):
-        raw_buffer: np.array = np.load(filename)
+        raw_buffer: np.array = np.load(filename, allow_pickle=True)
         # e stands for episode
         self.__array = [EpisodeTuple(e[0], e[1], e[2], e[3], e[4], e[5], e[6]) for e in raw_buffer]
