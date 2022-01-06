@@ -1,4 +1,3 @@
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as nn_functional
@@ -63,11 +62,6 @@ class Behavior(nn.Module):
         probs = nn_functional.softmax(logits, dim=-1)
         dist = Categorical(probs)
         return dist.sample().item()
-
-    def greedy_action(self, state, command, info):
-        logits = self.forward(state, command, info)
-        probs = nn_functional.softmax(logits, dim=-1)
-        return np.argmax(probs.detach().cpu().numpy())
 
     def init_optimizer(self, optim=Adam, lr=0.003):
         # noinspection PyAttributeOutsideInit

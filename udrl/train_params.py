@@ -15,7 +15,8 @@ class TrainParams:
             return_scale=0.02,
             evaluate_every=20,
             target_return=200,
-            max_reward=250,
+            min_reward=-15,
+            max_reward=15,
             max_steps=300,
             max_steps_reward=-50,
             n_evals=1,
@@ -35,6 +36,7 @@ class TrainParams:
         self.return_scale = return_scale
         self.evaluate_every = evaluate_every
         self.target_return = target_return
+        self.min_reward = min_reward
         self.max_reward = max_reward
         self.max_steps = max_steps
         self.max_steps_reward = max_steps_reward

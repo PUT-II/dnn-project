@@ -7,6 +7,12 @@ __STATE_SIZE_REV = tuple(reversed(__STATE_SIZE))
 """ State size represented as w and h """
 
 
+def clip_reward(reward, min_reward, max_reward):
+    max_clipped = min(reward, max_reward)
+    min_clipped = max(max_clipped, min_reward)
+    return min_clipped
+
+
 def get_state_size() -> tuple:
     return __STATE_SIZE
 

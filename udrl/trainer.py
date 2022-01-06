@@ -7,7 +7,7 @@ import torch.nn.functional as nn_functional
 from udrl.behavior import Behavior
 from udrl.replay_buffer import ReplayBuffer, EpisodeTuple
 from udrl.train_params import TrainParams
-from udrl.util import preprocess_state, preprocess_info, get_state_size
+from udrl.util import preprocess_state, preprocess_info, get_state_size, clip_reward
 
 
 class UdrlTrainer:
@@ -62,7 +62,7 @@ class UdrlTrainer:
 
             if i % self.params.evaluate_every == 0:
                 command = buffer.sample_command(self.params.last_few)
-                mean_return = self.__evaluate_agent(behavior, command)
+                mean_return = self.__evaluate_behavior(behavior, command)
 
                 learning_history.append({
                     'training_loss': mean_loss,
@@ -81,7 +81,7 @@ class UdrlTrainer:
 
         return behavior, buffer, learning_history
 
-    def __evaluate_agent(self, behavior, command, render=False):
+    def __evaluate_behavior(self, behavior, command, render=False):
         behavior.eval()
 
         print('\nEvaluation.', end=' ')
@@ -103,13 +103,13 @@ class UdrlTrainer:
                 if render:
                     self.env.render()
 
-                action = self.get_action(behavior.greedy_action, state, command, info)
+                action = self.get_action(behavior.action, state, command, info)
                 next_state, reward, done, info = self.step(action)
 
                 total_reward += reward
                 state = next_state
 
-                desired_return = min(desired_return - reward, self.params.max_reward)
+                desired_return = clip_reward(desired_return - reward, self.params.min_reward, self.params.max_reward)
                 desired_horizon = max(desired_horizon - 1, 1)
 
                 command = [desired_return, desired_horizon]
@@ -165,7 +165,7 @@ class UdrlTrainer:
             info = next_info
 
             # Clipped such that it's upper-bounded by the maximum return achievable in the env
-            desired_return = min(desired_return - reward, self.params.max_reward)
+            desired_return = clip_reward(desired_return - reward, self.params.min_reward, self.params.max_reward)
 
             # Make sure it's always a valid horizon
             desired_horizon = max(desired_horizon - 1, 1)
