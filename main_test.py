@@ -1,37 +1,22 @@
-import gym_super_mario_bros
-import torch
-from gym_super_mario_bros.actions import SIMPLE_MOVEMENT
-from nes_py.wrappers import JoypadSpace
+from udrl.agent import UdrlAgent
+from udrl.setup_helper import SetupHelper
 
-from udrl.behavior import Behavior
-from udrl.udrl import UDRL
+env = SetupHelper.get_environment()
+device = SetupHelper.get_device()
 
-env = gym_super_mario_bros.make('SuperMarioBros-v1')
-env = JoypadSpace(env, SIMPLE_MOVEMENT)
-
-device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-behavior = Behavior(
-    action_size=env.action_space.n,
-    info_size=3,
-    device=device,
-    command_scale=[0.02, 0.01]
-)
-
-behavior.load('behavior_latest.pth')
-
-agent = UDRL(env, device)
+agent = UdrlAgent(env, device, 3)
+agent.load_behavior('behavior_latest.pth')
 
 done = False
-state = agent.preprocess_state(env.reset())
-info = [0.0, 0.0, 0.0]
+agent.reset_env()
 for step in range(5000):
     if done:
         break
 
     # state --> image
     # info --> information about mario
-    action = agent.get_action(behavior.action, state, [300, 400], info)
-    state, _, done, info = agent.step(action)
+    action = agent.get_action(desired_return=300, horizon=400)
+    _, done = agent.step(action)
 
     env.render()
 

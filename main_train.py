@@ -1,21 +1,16 @@
-import gym_super_mario_bros
 import numpy as np
-import torch
-from gym_super_mario_bros.actions import SIMPLE_MOVEMENT
-from nes_py.wrappers import JoypadSpace
 
-from udrl import udrl
+from udrl.setup_helper import SetupHelper
 from udrl.train_params import TrainParams
+from udrl.trainer import UdrlTrainer
 
-env = gym_super_mario_bros.make('SuperMarioBros-v1')
-env = JoypadSpace(env, SIMPLE_MOVEMENT)
-
-device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+env = SetupHelper.get_environment()
+device = SetupHelper.get_device()
 
 params = TrainParams(save_on_eval=True)
-algorithm = udrl.UDRL(env, device, params)
+trainer = UdrlTrainer(env, device, params)
 
-behavior, buffer, learning_history = algorithm.train()
+behavior, buffer, learning_history = trainer.train()
 
 behavior.save('behavior_mario.pth')
 buffer.save('buffer_mario.npy')

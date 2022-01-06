@@ -5,14 +5,12 @@ import torch
 import torch.nn.functional as nn_functional
 
 from udrl.behavior import Behavior
-from udrl.replay_buffer import ReplayBuffer
+from udrl.replay_buffer import ReplayBuffer, EpisodeTuple
 from udrl.train_params import TrainParams
-from udrl.util import make_episode
+from udrl.util import preprocess_state, preprocess_info, get_state_size
 
 
-class UDRL:
-    __STATE_SIZE = (128, 128)
-
+class UdrlTrainer:
     def __init__(self, env, device, params: TrainParams = None):
         self.env = env
         self.device = device
@@ -37,8 +35,8 @@ class UDRL:
 
     def step(self, action: int):
         state, reward, done, info = self.env.step(action)
-        state = self.preprocess_state(state)
-        info = self.__preprocess_info(info)
+        state = preprocess_state(state)
+        info = preprocess_info(info)
         return state, reward, done, info
 
     def train(self, buffer=None, behavior=None, learning_history: list = None):
@@ -63,7 +61,7 @@ class UDRL:
             print(f"Took: {time() - time_start:.4f}s")
 
             if i % self.params.evaluate_every == 0:
-                command = self.__sample_command(buffer)
+                command = buffer.sample_command(self.params.last_few)
                 mean_return = self.__evaluate_agent(behavior, command)
 
                 learning_history.append({
@@ -98,7 +96,7 @@ class UDRL:
         for e in range(self.params.n_evals):
             done = False
             total_reward = 0
-            state = self.preprocess_state(self.env.reset())
+            state = preprocess_state(self.env.reset())
             info = [0.0, 0.0, 0.0]
 
             while not done:
@@ -128,7 +126,7 @@ class UDRL:
 
         return mean_return
 
-    def __generate_episode(self, policy, init_command: list = None) -> make_episode:
+    def __generate_episode(self, policy, init_command: list = None) -> EpisodeTuple:
         if init_command is None:
             init_command = [1, 1]
 
@@ -143,7 +141,7 @@ class UDRL:
 
         time_steps = 0
         done = False
-        state = self.preprocess_state(self.env.reset())
+        state = preprocess_state(self.env.reset())
         info = [0.0, 0.0, 0.0]
 
         while not done:
@@ -175,7 +173,7 @@ class UDRL:
             command = [desired_return, desired_horizon]
             time_steps += 1
 
-        return make_episode(states, actions, infos, rewards, init_command, sum(rewards), len(states))
+        return EpisodeTuple(states, actions, infos, rewards, init_command, sum(rewards), len(states))
 
     def __initialize_replay_buffer(self) -> ReplayBuffer:
         def random_policy(*_):
@@ -184,12 +182,12 @@ class UDRL:
         buffer = ReplayBuffer()
 
         for i in range(self.params.n_warm_up_episodes):
-            command = self.__sample_command(buffer)
+            command = buffer.sample_command(self.params.last_few)
             episode = self.__generate_episode(random_policy, command)  # See Algorithm 2
             buffer.append(episode)
 
         buffer.sort()
-        return buffer.get_n_first(self.params.replay_size)
+        return buffer[:self.params.replay_size]
 
     def __initialize_behavior_function(self) -> Behavior:
         behavior = Behavior(
@@ -205,19 +203,19 @@ class UDRL:
 
     def __generate_episodes(self, behavior, buffer: ReplayBuffer):
         for i in range(self.params.n_episodes_per_iter):
-            command = self.__sample_command(buffer)
+            command = buffer.sample_command(self.params.last_few)
             episode = self.__generate_episode(behavior.action, command)  # See Algorithm 2
             buffer.append(episode)
 
         buffer.sort()
-        return buffer.get_n_first(self.params.replay_size)
+        return buffer[:self.params.replay_size]
 
     def __train_behavior(self, behavior: Behavior, buffer: ReplayBuffer) -> np.float64:
         all_loss = []
         for update in range(self.params.n_updates_per_iter):
             episodes = buffer.random_batch(self.params.batch_size)
 
-            batch_states = np.ndarray(shape=(self.params.batch_size, 1) + self.__STATE_SIZE)
+            batch_states = np.ndarray(shape=(self.params.batch_size, 1) + get_state_size())
             batch_commands = np.ndarray(shape=(self.params.batch_size, 2), dtype=np.int32)
             batch_actions = np.ndarray(shape=(self.params.batch_size,), dtype=np.uint8)
             batch_info = np.ndarray(shape=(self.params.batch_size, 3), dtype=np.float32)
@@ -253,41 +251,3 @@ class UDRL:
 
         # noinspection PyTypeChecker
         return np.mean(all_loss)
-
-    def __sample_command(self, buffer: ReplayBuffer):
-        if len(buffer) == 0:
-            return [1, 1]
-
-        commands = buffer.get_n_last(self.params.last_few)
-
-        lengths = [command.length for command in commands]
-        desired_horizon = np.round(np.mean(lengths))
-
-        returns = [command.total_return for command in commands]
-        mean_return, std_return = np.mean(returns), np.std(returns)
-        desired_return = np.random.uniform(mean_return, mean_return + std_return)
-
-        return [desired_return, desired_horizon]
-
-    @staticmethod
-    def preprocess_state(state: np.ndarray):
-        import cv2 as cv
-
-        grayscale = cv.cvtColor(state, cv.COLOR_RGB2GRAY)
-        rescaled = cv.resize(grayscale, UDRL.__STATE_SIZE)
-
-        return rescaled
-
-    @staticmethod
-    def __preprocess_info(info: dict) -> np.array:
-        status = info["status"]
-        status_numeric = 0
-        if status == "small":
-            status_numeric = 0.25
-        elif status == "tall":
-            status_numeric = 0.5
-        elif status == "fireball":
-            status_numeric = 0.75
-
-        info_out = [float(info["x_pos"]) / 256.0, float(info["y_pos"]) / 240.0, status_numeric]
-        return np.array(info_out, dtype=np.float32)

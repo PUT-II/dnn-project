@@ -31,7 +31,7 @@ class Behavior(nn.Module):
             nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1),
             nn.ReLU(),
             nn.Flatten(),
-            nn.Linear(in_features=9216, out_features=512)
+            nn.Linear(in_features=7680, out_features=512)
         )
 
         self.command_fc = nn.Sequential(nn.Linear(2, 512),
