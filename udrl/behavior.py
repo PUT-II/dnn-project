@@ -23,14 +23,13 @@ class Behavior(nn.Module):
 
         # noinspection PyTypeChecker
         self.state_fc = nn.Sequential(
-            nn.Conv2d(in_channels=1, out_channels=32, kernel_size=8, stride=4),
-            nn.ReLU(),
-            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2),
-            nn.ReLU(),
-            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1),
+            nn.Conv2d(in_channels=1, out_channels=16, kernel_size=4),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=16),
+            nn.Conv2d(in_channels=16, out_channels=32, kernel_size=4),
             nn.ReLU(),
             nn.Flatten(),
-            nn.Linear(in_features=7680, out_features=512)
+            nn.Linear(in_features=384, out_features=512)
         )
 
         self.command_fc = nn.Sequential(nn.Linear(2, 512),
