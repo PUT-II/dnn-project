@@ -10,7 +10,7 @@ from udrl.trainer import UdrlTrainer
 def load_previous_train_data(trainer: UdrlTrainer):
     from udrl.replay_buffer import ReplayBuffer
 
-    if not isfile('buffer_latest.npy') or not isfile('buffer_latest.npy') or not isfile('buffer_latest.npy'):
+    if not isfile('buffer_latest.npy') or not isfile('behavior_latest.npy') or not isfile('history_latest.npy'):
         return None
 
     buffer = ReplayBuffer()
