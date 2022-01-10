@@ -1,3 +1,5 @@
+from os.path import isfile
+
 import numpy as np
 
 from udrl.setup_helper import SetupHelper
@@ -7,6 +9,9 @@ from udrl.trainer import UdrlTrainer
 
 def load_previous_train_data(trainer: UdrlTrainer):
     from udrl.replay_buffer import ReplayBuffer
+
+    if not isfile('buffer_latest.npy') or not isfile('buffer_latest.npy') or not isfile('buffer_latest.npy'):
+        return None
 
     buffer = ReplayBuffer()
     buffer.load('buffer_latest.npy')
@@ -26,11 +31,12 @@ def train(resume_training: bool = False):
     params = TrainParams(save_on_eval=True)
     trainer = UdrlTrainer(env, device, params)
 
-    if resume_training:
-        behavior, buffer, learning_history = load_previous_train_data(trainer)
-        behavior, buffer, learning_history = trainer.train(behavior, buffer, learning_history)
-    else:
+    data = load_previous_train_data(trainer) if resume_training else None
+    if data is None:
         behavior, buffer, learning_history = trainer.train()
+    else:
+        behavior, buffer, learning_history = data
+        behavior, buffer, learning_history = trainer.train(behavior, buffer, learning_history)
 
     behavior.save('behavior_latest.pth')
     buffer.save('buffer_latest.npy')
@@ -38,4 +44,4 @@ def train(resume_training: bool = False):
 
 
 if __name__ == "__main__":
-    train(False)
+    train(True)

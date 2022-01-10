@@ -28,17 +28,16 @@ class Behavior(nn.Module):
             nn.MaxPool2d(kernel_size=16),
             nn.Conv2d(in_channels=16, out_channels=32, kernel_size=4),
             nn.ReLU(),
-            nn.Flatten(),
-            nn.Linear(in_features=384, out_features=512)
+            nn.Flatten()
         )
 
-        self.command_fc = nn.Sequential(nn.Linear(2, 512),
+        self.command_fc = nn.Sequential(nn.Linear(2, 384),
                                         nn.Sigmoid())
 
-        self.info_fc = nn.Sequential(nn.Linear(info_size, 512),
+        self.info_fc = nn.Sequential(nn.Linear(info_size, 384),
                                      nn.Sigmoid())
 
-        self.output_fc = nn.Sequential(nn.Linear(512, 128),
+        self.output_fc = nn.Sequential(nn.Linear(384, 128),
                                        nn.ReLU(),
                                        nn.Linear(128, 128),
                                        nn.ReLU(),

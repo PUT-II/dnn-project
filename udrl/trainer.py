@@ -41,7 +41,11 @@ class UdrlTrainer:
 
     def train(self, buffer=None, behavior=None, learning_history: list = None):
         if learning_history is None:
+            start_iter = 1
             learning_history = []
+        else:
+            start_iter = max(learning_history, key=lambda e: e['iter'])['iter']
+            start_iter += 1
 
         if buffer is None:
             buffer = self.__initialize_replay_buffer()
@@ -49,7 +53,7 @@ class UdrlTrainer:
         if behavior is None:
             behavior = self.initialize_behavior_function()
 
-        for i in range(1, self.params.n_main_iter + 1):
+        for i in range(start_iter, self.params.n_main_iter + 1):
             time_start = time()
             print(f"Iter: {i}, ", end="")
             mean_loss = self.__train_behavior(behavior, buffer)
@@ -66,6 +70,7 @@ class UdrlTrainer:
                 mean_return = self.__evaluate_behavior(behavior, command)
 
                 learning_history.append({
+                    'iter': i,
                     'training_loss': mean_loss,
                     'desired_return': command[0],
                     'desired_horizon': command[1],
@@ -73,6 +78,7 @@ class UdrlTrainer:
                 })
 
                 if self.params.save_on_eval:
+                    behavior.save(f'behavior_{i}.pth')
                     behavior.save('behavior_latest.pth')
                     buffer.save('buffer_latest.npy')
                     np.save('history_latest.npy', np.array(learning_history, dtype=object))
