@@ -17,7 +17,7 @@ def load_previous_train_data(trainer: UdrlTrainer):
     buffer.load('buffer_latest.npy')
 
     behavior = trainer.initialize_behavior_function()
-    behavior.load('behavior_latest.pth')
+    behavior.load('behavior_latest.pth', trainer.device)
 
     learning_history = list(np.load('history_latest.npy', allow_pickle=True))
 

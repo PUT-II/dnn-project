@@ -68,5 +68,5 @@ class Behavior(nn.Module):
     def save(self, filename):
         torch.save(self.state_dict(), filename)
 
-    def load(self, filename):
-        self.load_state_dict(torch.load(filename))
+    def load(self, filename, device: torch.device):
+        self.load_state_dict(torch.load(filename, map_location=device))

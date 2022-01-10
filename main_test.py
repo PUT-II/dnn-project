@@ -8,7 +8,7 @@ env = SetupHelper.get_environment()
 device = SetupHelper.get_device()
 
 agent = UdrlAgent(env, device, 3)
-agent.load_behavior('behavior_latest.pth')
+agent.load_behavior('behavior_latest.pth', device)
 agent.reset_env()
 
 done = False

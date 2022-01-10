@@ -45,5 +45,5 @@ class UdrlAgent:
         self.current_state = preprocess_state(self.environment.reset())
         self.current_info: np.ndarray = np.zeros((3,), np.float32)
 
-    def load_behavior(self, file_path: str):
-        self.behavior.load(file_path)
+    def load_behavior(self, file_path: str, device: torch.device):
+        self.behavior.load(file_path, device)
