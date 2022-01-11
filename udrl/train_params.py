@@ -13,7 +13,7 @@ class TrainParams:
             n_warm_up_episodes=30,
             skip_every_n_observations=3,
             replay_size=400,
-            evaluate_every=10,
+            evaluate_every=5,
             target_return=500,
             min_reward=-15,
             max_reward=15,

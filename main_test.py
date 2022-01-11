@@ -4,11 +4,11 @@ from udrl.agent import UdrlAgent
 from udrl.setup_helper import SetupHelper
 from udrl.util import clip_reward
 
-env = SetupHelper.get_environment()
+env = SetupHelper.get_environment(world=4)
 device = SetupHelper.get_device()
 
 agent = UdrlAgent(env, device, 3)
-agent.load_behavior('behavior_latest.pth', device)
+agent.load_behavior('behavior_1.pth', device)
 agent.reset_env()
 
 done = False

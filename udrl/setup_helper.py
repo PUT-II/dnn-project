@@ -1,6 +1,6 @@
 import gym_super_mario_bros
 import torch
-from gym_super_mario_bros.actions import SIMPLE_MOVEMENT
+from gym_super_mario_bros.actions import RIGHT_ONLY
 from nes_py.wrappers import JoypadSpace
 
 
@@ -11,6 +11,6 @@ class SetupHelper:
         return torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
     @staticmethod
-    def get_environment() -> JoypadSpace:
-        env = gym_super_mario_bros.make('SuperMarioBros-v1')
-        return JoypadSpace(env, SIMPLE_MOVEMENT)
+    def get_environment(world: int = 1, stage: int = 1) -> JoypadSpace:
+        env = gym_super_mario_bros.make(f'SuperMarioBros-{world}-{stage}-v1')
+        return JoypadSpace(env, RIGHT_ONLY)

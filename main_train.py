@@ -25,11 +25,13 @@ def load_previous_train_data(trainer: UdrlTrainer):
 
 
 def train(resume_training: bool = False):
-    env = SetupHelper.get_environment()
+    envs = []
+    for i in range(1, 8):
+        envs += [SetupHelper.get_environment(world=i, stage=j) for j in range(1, 4)]
     device = SetupHelper.get_device()
 
     params = TrainParams(save_on_eval=True)
-    trainer = UdrlTrainer(env, device, params)
+    trainer = UdrlTrainer(envs, device, params)
 
     data = load_previous_train_data(trainer) if resume_training else None
     if data is None:

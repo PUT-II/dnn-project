@@ -2,7 +2,7 @@ import numpy as np
 import torch
 
 from udrl.behavior import Behavior
-from udrl.util import get_state_size, preprocess_state, preprocess_info
+from udrl.util import get_state_size, preprocess_state, preprocess_info, get_state_channels
 
 
 class UdrlAgent:
@@ -21,14 +21,18 @@ class UdrlAgent:
             action_size=environment.action_space.n,
             info_size=info_size,
             device=device,
-            command_scale=command_scale
+            state_channels=get_state_channels(),
+            command_scale=command_scale,
         )
 
     def get_action(self, desired_return: int, horizon: int) -> int:
         command = [desired_return, horizon]
-        state = np.ascontiguousarray(np.expand_dims(self.current_state, axis=(0, 1)))
+        if get_state_channels() == 1:
+            expanded_state = np.ascontiguousarray(np.expand_dims(self.current_state, axis=(0, 1)))
+        else:
+            expanded_state = np.ascontiguousarray(np.expand_dims(self.current_state, axis=(0,)))
 
-        state_input = torch.FloatTensor(state).to(self.device)
+        state_input = torch.FloatTensor(expanded_state).to(self.device)
         info_input = torch.FloatTensor(self.current_info).to(self.device)
         command_input = torch.FloatTensor(command).to(self.device)
 

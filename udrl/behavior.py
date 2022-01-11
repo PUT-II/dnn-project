@@ -12,6 +12,7 @@ class Behavior(nn.Module):
             action_size: int,
             info_size: int,
             device,
+            state_channels: int = 1,
             command_scale: list = None
     ):
         if command_scale is None:
@@ -23,7 +24,7 @@ class Behavior(nn.Module):
 
         # noinspection PyTypeChecker
         self.state_fc = nn.Sequential(
-            nn.Conv2d(in_channels=1, out_channels=16, kernel_size=4),
+            nn.Conv2d(in_channels=state_channels, out_channels=16, kernel_size=4),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=16),
             nn.Conv2d(in_channels=16, out_channels=32, kernel_size=4),
