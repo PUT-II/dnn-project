@@ -33,6 +33,10 @@ class ReplayBuffer:
         else:
             return self.__array[item]
 
+    def __iter__(self):
+        for item in self.__array:
+            yield item
+
     def append(self, item):
         self.__array.append(item)
 
