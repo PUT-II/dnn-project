@@ -18,6 +18,8 @@ EpisodeTuple = namedtuple(
 
 
 class ReplayBuffer:
+    __array: List[EpisodeTuple]
+
     def __init__(self, init_array: List[EpisodeTuple] = None):
         if init_array is None:
             self.__array = []
@@ -32,6 +34,10 @@ class ReplayBuffer:
             return ReplayBuffer(self.__array[item])
         else:
             return self.__array[item]
+
+    def __iter__(self):
+        for item in self.__array:
+            yield item
 
     def append(self, item):
         self.__array.append(item)

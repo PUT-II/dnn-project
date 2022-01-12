@@ -12,6 +12,7 @@ class Behavior(nn.Module):
             action_size: int,
             info_size: int,
             device,
+            state_channels: int = 1,
             command_scale: list = None
     ):
         if command_scale is None:
@@ -23,23 +24,23 @@ class Behavior(nn.Module):
 
         # noinspection PyTypeChecker
         self.state_fc = nn.Sequential(
-            nn.Conv2d(in_channels=1, out_channels=32, kernel_size=8, stride=4),
+            nn.Conv2d(in_channels=state_channels, out_channels=32, kernel_size=8, stride=4),
             nn.ReLU(),
             nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2),
             nn.ReLU(),
             nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1),
             nn.ReLU(),
             nn.Flatten(),
-            nn.Linear(in_features=7680, out_features=512)
+            nn.Linear(in_features=7680, out_features=1024)
         )
 
-        self.command_fc = nn.Sequential(nn.Linear(2, 512),
+        self.command_fc = nn.Sequential(nn.Linear(2, 1024),
                                         nn.Sigmoid())
 
-        self.info_fc = nn.Sequential(nn.Linear(info_size, 512),
+        self.info_fc = nn.Sequential(nn.Linear(info_size, 1024),
                                      nn.Sigmoid())
 
-        self.output_fc = nn.Sequential(nn.Linear(512, 128),
+        self.output_fc = nn.Sequential(nn.Linear(1024, 128),
                                        nn.ReLU(),
                                        nn.Linear(128, 128),
                                        nn.ReLU(),
@@ -70,5 +71,5 @@ class Behavior(nn.Module):
     def save(self, filename):
         torch.save(self.state_dict(), filename)
 
-    def load(self, filename):
-        self.load_state_dict(torch.load(filename))
+    def load(self, filename, device: torch.device):
+        self.load_state_dict(torch.load(filename, map_location=device))

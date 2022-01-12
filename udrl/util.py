@@ -6,6 +6,10 @@ __STATE_SIZE = (110, 128)
 __STATE_SIZE_REV = tuple(reversed(__STATE_SIZE))
 """ State size represented as w and h """
 
+__USE_RGB = False
+
+__STATE_CHANNELS = 3 if __USE_RGB else 1
+
 __STATUS_DICT = {
     "small": 0.25,
     "tall": 0.5,
@@ -19,17 +23,26 @@ def clip_reward(reward, min_reward, max_reward):
     return min_clipped
 
 
+def get_state_channels() -> int:
+    return __STATE_CHANNELS
+
+
 def get_state_size() -> tuple:
     return __STATE_SIZE
 
 
 def preprocess_state(state: np.ndarray):
     import cv2 as cv
+    result = state
 
-    grayscale = cv.cvtColor(state, cv.COLOR_RGB2GRAY)
-    rescaled = cv.resize(grayscale, __STATE_SIZE_REV)
+    if not __USE_RGB:
+        result = cv.cvtColor(result, cv.COLOR_RGB2GRAY)
+    result = cv.resize(result, __STATE_SIZE_REV)
 
-    return rescaled
+    if __STATE_CHANNELS > 1:
+        result = np.transpose(result, (2, 0, 1))
+
+    return result
 
 
 def preprocess_info(info: dict) -> np.array:
@@ -38,5 +51,5 @@ def preprocess_info(info: dict) -> np.array:
     if status in __STATUS_DICT:
         status_numeric = __STATUS_DICT[status]
 
-    info_out = [float(info["x_pos"]) / 256.0, float(info["y_pos"]) / 240.0, status_numeric]
+    info_out = [status_numeric]
     return np.array(info_out, dtype=np.float32)
