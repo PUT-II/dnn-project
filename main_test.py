@@ -1,36 +1,32 @@
-import gym_super_mario_bros
-import torch
-from gym_super_mario_bros.actions import SIMPLE_MOVEMENT
-from nes_py.wrappers import JoypadSpace
+import numpy as np
 
-from udrl.behavior import Behavior
-from udrl.udrl import UDRL
+from udrl.agent import UdrlAgent
+from udrl.setup_helper import SetupHelper
+from udrl.util import clip_reward
 
-env = gym_super_mario_bros.make('SuperMarioBros-v1')
-env = JoypadSpace(env, SIMPLE_MOVEMENT)
+env = SetupHelper.get_environment(world=1)
+device = SetupHelper.get_device()
 
-device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-behavior = Behavior(action_size=env.action_space.n,
-                    device=device,
-                    command_scale=[0.02, 0.01])
-
-behavior.load('behavior_mario.pth')
-
-agent = UDRL(env, device)
+agent = UdrlAgent(env, device, info_size=1)
+agent.load_behavior('behavior_latest.pth', device)
+agent.reset_env()
 
 done = False
-env.reset()
-state, reward, _ = agent.step(0)  # NOOP
-for step in range(5000):
+desired_return = 2500
+desired_horizon = 330
+all_rewards = []
+for step in range(20000):
     if done:
-        env.reset()
-        state, reward, done = agent.step(0)  # NOOP
+        break
 
-    # state = image
-    # info = information about player
-    action = agent.get_action(behavior.action, state, [302, 400])
-    state, _, done = agent.step(action)
-
+    action = agent.get_action(desired_return, desired_horizon)
+    reward, done = agent.step(action)
+    all_rewards.append(reward)
     env.render()
 
+    desired_horizon = np.random.randint(200, 400)
+    desired_return = clip_reward(desired_return - reward, desired_horizon * -15, desired_horizon * 15)
+
+total_reward = sum(all_rewards)
+print(f"Total reward: {total_reward}")
 env.close()
