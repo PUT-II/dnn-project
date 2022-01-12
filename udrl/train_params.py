@@ -12,14 +12,15 @@ class TrainParams:
             n_updates_per_iter=500,
             n_warm_up_episodes=30,
             skip_every_n_observations=3,
-            replay_size=400,
+            replay_size=1000,
+            min_replay_reward=0,
             evaluate_every=5,
             target_return=500,
             min_reward=-15,
             max_reward=15,
             max_steps=1000,
             max_steps_penalty=-50,
-            n_evals=1,
+            n_evals=4,
             stop_on_solved=False,
             save_on_eval=False
     ):
@@ -34,6 +35,7 @@ class TrainParams:
         self.n_warm_up_episodes = n_warm_up_episodes
         self.skip_every_n_observations = skip_every_n_observations
         self.replay_size = replay_size
+        self.min_replay_reward = min_replay_reward
         self.evaluate_every = evaluate_every
         self.target_return = target_return
         self.min_reward = min_reward

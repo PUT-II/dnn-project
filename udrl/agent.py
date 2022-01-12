@@ -9,8 +9,9 @@ class UdrlAgent:
 
     def __init__(self, environment, device, info_size: int, command_scale: list = None):
         self.environment = environment
+        self.info_size = info_size
         self.current_state: np.ndarray = np.zeros(get_state_size(), dtype=np.int32)
-        self.current_info: np.ndarray = np.zeros((3,), np.float32)
+        self.current_info: np.ndarray = np.zeros((info_size,), np.float32)
 
         if command_scale is None:
             command_scale = [0.02, 0.01]
@@ -47,7 +48,7 @@ class UdrlAgent:
 
     def reset_env(self):
         self.current_state = preprocess_state(self.environment.reset())
-        self.current_info: np.ndarray = np.zeros((3,), np.float32)
+        self.current_info: np.ndarray = np.zeros((self.info_size,), np.float32)
 
     def load_behavior(self, file_path: str, device: torch.device):
         self.behavior.load(file_path, device)

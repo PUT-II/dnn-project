@@ -18,7 +18,7 @@ class UdrlTrainer:
         self.state_size = self.envs[0].observation_space.shape[0]
         # self.state_size = 10
         self.action_size = self.envs[0].action_space.n
-        self.info_size = 3
+        self.info_size = 1
 
         if params is None:
             self.params = TrainParams()
@@ -124,7 +124,7 @@ class UdrlTrainer:
             done = False
             total_reward = 0
             state = preprocess_state(env.reset())
-            info = [0.0, 0.0, 0.0]
+            info = [0.0] * self.info_size
 
             while not done:
                 if render:
@@ -168,7 +168,7 @@ class UdrlTrainer:
         time_steps = 0
         done = False
         state = preprocess_state(env.reset())
-        info = [0.0, 0.0, 0.0]
+        info = [0.0] * self.info_size
 
         while not done:
             action = self.get_action(policy, state, command, info)
@@ -209,11 +209,16 @@ class UdrlTrainer:
             return np.random.randint(self.envs[0].action_space.n)
 
         buffer = ReplayBuffer()
-
-        for i in range(self.params.n_warm_up_episodes):
+        warm_up_message_len = 0
+        while len(buffer) < self.params.n_warm_up_episodes:
             command = buffer.sample_command(self.params.last_few)
             episode = self.__generate_episode(np.random.choice(self.envs), random_policy, command)  # See Algorithm 2
-            buffer.append(episode)
+            if episode.total_return >= self.params.min_replay_reward:
+                buffer.append(episode)
+
+            if len(buffer) % 10 == 0 and len(buffer) != warm_up_message_len:
+                print(f"Generated {len(buffer)} of {self.params.n_warm_up_episodes} warm up episodes")
+                warm_up_message_len = len(buffer)
 
         buffer.sort()
         return buffer[:self.params.replay_size]
@@ -223,7 +228,8 @@ class UdrlTrainer:
             env = np.random.choice(self.envs)
             command = buffer.sample_command(self.params.last_few)
             episode = self.__generate_episode(env, behavior.action, command)  # See Algorithm 2
-            buffer.append(episode)
+            if episode.total_return >= self.params.min_replay_reward:
+                buffer.append(episode)
 
         buffer.sort()
         return buffer[:self.params.replay_size]
@@ -237,7 +243,7 @@ class UdrlTrainer:
             batch_states = np.ndarray(shape=(self.params.batch_size, channels) + get_state_size())
             batch_commands = np.ndarray(shape=(self.params.batch_size, 2), dtype=np.int32)
             batch_actions = np.ndarray(shape=(self.params.batch_size,), dtype=np.uint8)
-            batch_info = np.ndarray(shape=(self.params.batch_size, 3), dtype=np.float32)
+            batch_info = np.ndarray(shape=(self.params.batch_size, self.info_size), dtype=np.float32)
 
             for i, episode in enumerate(episodes):
                 # noinspection PyPep8Naming

@@ -25,9 +25,7 @@ def load_previous_train_data(trainer: UdrlTrainer):
 
 
 def train(resume_training: bool = False):
-    envs = []
-    for i in range(1, 8):
-        envs += [SetupHelper.get_environment(world=i, stage=j) for j in range(1, 4)]
+    envs = [SetupHelper.get_environment(world=1, stage=j) for j in range(1, 4)]
     device = SetupHelper.get_device()
 
     params = TrainParams(save_on_eval=True)

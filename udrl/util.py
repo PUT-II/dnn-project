@@ -51,5 +51,5 @@ def preprocess_info(info: dict) -> np.array:
     if status in __STATUS_DICT:
         status_numeric = __STATUS_DICT[status]
 
-    info_out = [float(info["x_pos"]) / 256.0, float(info["y_pos"]) / 240.0, status_numeric]
+    info_out = [status_numeric]
     return np.array(info_out, dtype=np.float32)
